@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:twilio-connector="http://www.mulesoft.org/schema/mule/twilio-connector"
+	xmlns:twilio="http://www.mulesoft.org/schema/mule/twilio"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/twilio http://www.mulesoft.org/schema/mule/twilio/current/mule-twilio.xsd
+http://www.mulesoft.org/schema/mule/twilio-connector http://www.mulesoft.org/schema/mule/twilio-connector/current/mule-twilio-connector.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<twilio-connector:config name="Twilio_Connector_Config" doc:name="Twilio Connector Config" doc:id="9b26e907-302c-4f7a-92f9-bbe6dece2e7a" property_username="${config.accountSid}" property_password="${config.authToken}" />
+	<flow name="send_message" doc:id="ae315b0c-3148-4b86-9734-d2968c951718" >
+		<http:listener doc:name="Listener" doc:id="09edfcb4-181c-4681-b871-3a9a88dc0b06" config-ref="HTTP_Listener_config" path="/api/twilio/{toNumber}"/>
+		<ee:transform doc:name="Transform Message" doc:id="6be0c8a5-674f-44d2-8c25-9801c9b752fe" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/x-www-form-urlencoded
+---
+{
+	To: "+" ++ attributes.uriParams.toNumber as String,
+	From:p('config.fromNumber'),
+	Body:payload
+	
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<twilio-connector:send-message doc:name="Send Message" doc:id="2dbebcef-0f06-4afc-88f5-9798bb1a9207" config-ref="Twilio_Connector_Config" account-sid="${config.accountSid}"/>
+		<logger level="INFO" doc:name="Logger" doc:id="d7ce2666-90bd-4eb0-af06-d00e9d0b623f" message='#["**************Message was sent****************** "]'/>
+		<set-variable value="#[payload.sid]" doc:name="Set Variable" doc:id="3cee3a7e-6f15-4ac8-8bb7-d3d201dad021" variableName="messageSid" />
+		<ee:transform doc:name="Transform Message" doc:id="b8c6bb3f-7242-486f-8c3d-b5ebb8dadd79">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	Body: "",
+	From: payload.'to',
+	To: payload.from
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<twilio-connector:redact-message doc:name="Redact Message" doc:id="b68cfb2a-7b8f-46ab-9c21-938a7213562d" config-ref="Twilio_Connector_Config" account-sid="${config.accountSid}" message-sid="#[vars.messageSid]" />
+		<ee:transform doc:name="Transform Message" doc:id="f95007cc-9363-448b-a481-c0d1a43ed9f0">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="eb070a4f-ffbd-494d-a485-519d07fda923" >
+				<set-payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	"message":error.detailedDescription&#10;}]' doc:name="Set Payload" doc:id="31347621-5b0b-4b75-ae62-f1218bb256a2" />
+				<logger level="INFO" doc:name="Logger" doc:id="f92d7c9b-7992-49f3-8c6e-e68b28281fde" message="#[payload]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>
